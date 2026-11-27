@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Volt Drain Demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f5f7f4; --surface:#ffffff; --fg:#17201b; --muted:#5b6a61; --line:#d9e1db;
+  --accent:#1f8a5b; --red:#c2412d;
+  --c-cur:#8a8f8c; --c-intro:#6a4fc4; --c-ambi:#1f8a5b; --c-extro:#d0761a;
+  --band-out:rgba(201,138,18,.12); --band-sleep:rgba(80,90,160,.12); --band-guests:rgba(194,65,45,.10);
+  --f-display:"Sora",system-ui,sans-serif; --f-body:"IBM Plex Sans",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#101512; --surface:#171e1a; --fg:#e4ebe6; --muted:#97a69c; --line:#2a3530;
+  --accent:#4cc28a; --red:#ec6b55;
+  --c-cur:#9aa09c; --c-intro:#a48cff; --c-ambi:#4cc28a; --c-extro:#f0994a;
+  --band-out:rgba(227,168,58,.14); --band-sleep:rgba(140,150,230,.14); --band-guests:rgba(236,107,85,.14);
+  color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right)) 60px max(16px,env(safe-area-inset-left));display:flex;flex-direction:column;gap:22px}
+h1,h2{font-family:var(--f-display);margin:0;line-height:1.2}
+h1{font-size:1.7rem} h2{font-size:1.05rem}
+p{margin:0}
+.muted{color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button,.btn{font:inherit;font-size:.88rem;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.85rem}
+.legend label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+svg text{fill:var(--muted);font-family:var(--f-mono);font-size:11px}
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:5px 6px;border-bottom:1px solid var(--line)}
+th{font-weight:600;color:var(--muted);font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+td.num,th.num{text-align:right}
+.tablewrap{overflow-x:auto}
+input[type=time],input[type=number],select{font:inherit;font-size:.88rem;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px}
+input[type=number]{width:64px}
+#personas input[type=number]{width:54px}
+.ctl{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:.85rem;align-items:center}
+.ctl input[type=range]{grid-column:1 / -1;width:100%;accent-color:var(--accent)}
+.ctl output{font-family:var(--f-mono)}
+.group{display:flex;flex-direction:column;gap:12px}
+.group h3{margin:0;font-size:.75rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.x{color:var(--red);border-color:transparent;padding:2px 8px}
+code{font-family:var(--f-mono);font-size:.85em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:flex;flex-direction:column;gap:6px">
+    <h1>Volt drain demo</h1>
+    <p class="muted">Test the proposed social battery model on a day you describe. Pick a preset, edit the schedule, and tune the numbers. The dashed grey line is the formula the app uses today.</p>
+  </header>
+
+  <div class="grid">
+    <div style="display:flex;flex-direction:column;gap:22px;min-width:0">
+      <section class="card">
+        <div class="seg" id="presets" role="group" aria-label="Preset days"></div>
+        <div class="legend" id="legend"></div>
+        <div style="overflow-x:auto"><svg id="chart" viewBox="0 0 800 300" width="100%" role="img" aria-label="Battery level over the day"></svg></div>
+        <p class="muted" id="note" style="font-size:.88rem"></p>
+        <div class="tablewrap"><table id="summary">
+          <thead><tr><th>Model</th><th class="num">Lowest</th><th class="num">At bedtime</th><th class="num">End</th><th class="num">Peak drain</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+
+      <section class="card">
+        <div class="row" style="justify-content:space-between">
+          <h2>Schedule</h2>
+          <div class="row"><button class="btn" id="addRow" type="button">Add block</button><button class="btn" id="copyJson" type="button">Copy as JSON</button></div>
+        </div>
+        <p class="muted" style="font-size:.85rem">Times run from 07:00 to 07:00 the next morning. "People" means people nearby, not Bluetooth devices (roughly devices ÷ 2). Gaps count as home alone.</p>
+        <div class="tablewrap"><table id="sched">
+          <thead><tr><th>From</th><th>To</th><th>Where</th><th class="num">People</th><th>Close friends</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </section>
+    </div>
+
+    <aside class="card">
+      <div class="group">
+        <h3>Start</h3>
+        <label class="ctl" for="startLevel">Starting battery <output id="startLevelOut"></output><input id="startLevel" type="range" min="0" max="100" step="5" value="90"></label>
+        <label class="ctl" for="hrv">HRV factor (1 = no watch) <output id="hrvOut"></output><input id="hrv" type="range" min="0.85" max="1.3" step="0.05" value="1"></label>
+      </div>
+      <div class="group" id="modelCtl"><h3>Model</h3></div>
+      <div class="group">
+        <h3>Personas</h3>
+        <div class="tablewrap"><table id="personas">
+          <thead><tr><th></th><th class="num">Temper.</th><th class="num">Comfort</th><th class="num">Rech. h</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <button class="btn" id="reset" type="button">Reset all numbers</button>
+    </aside>
+  </div>
+</div>
+
+<script src="drain-model.js"></script>
+<script>
+(function(){
+  const M = window.VoltModel;
+  const START_HOUR = 7, DAY_MIN = 1440;
+  const SERIES = [["current","Current formula","--c-cur"],["introvert","Introvert","--c-intro"],["ambivert","Ambivert","--c-ambi"],["extrovert","Extrovert","--c-extro"]];
+  const MODEL_CTLS = [
+    ["maxDrainPerHour","Max drain rate (%/h)",2,30,1],
+    ["crowdExponent","Crowd curve exponent",0.3,1,0.05],
+    ["outBaseLoad","Cost of being out",0,0.4,0.02],
+    ["closeFriendFactor","Close friend factor",0.2,1,0.05],
+    ["deferredShare","Share felt later",0,0.8,0.05],
+    ["deferredMinutes","Later fatigue spread (min)",15,240,15],
+    ["lowBatteryBoost","Low battery speed-up",0,1,0.05],
+    ["sleepHalfLifeHours","Sleep recharge half-life (h)",0.5,5,0.25]
+  ];
+  const clone = o => JSON.parse(JSON.stringify(o));
+  let state;
+  function fresh(day){ return {
+    day: day || "office",
+    segments: clone(M.PRESET_DAYS[day || "office"].segments),
+    params: clone(M.DEFAULT_PARAMS),
+    personas: clone(M.PERSONAS),
+    show: {current:true,introvert:true,ambivert:true,extrovert:true},
+    startLevel: 90, hrv: 1
+  };}
+  state = fresh();
+
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const toClock = m => { const t=(m+START_HOUR*60)%DAY_MIN; return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0"); };
+  const fromClock = s => { const [h,mi]=s.split(":").map(Number); return ((h*60+mi) - START_HOUR*60 + DAY_MIN) % DAY_MIN; };
+  const fmt = (v,step) => step < 1 ? Number(v).toFixed(2) : String(v);
+
+  // Fill gaps with "home alone" so the day is always 24 h.
+  function fullDay(){
+    const segs = state.segments.filter(s=>s.end>s.start).map(s=>({...s})).sort((a,b)=>a.start-b.start);
+    const out=[]; let t=0;
+    for (const s of segs){ if (s.start>t) out.push({start:t,end:s.start,place:"home",people:0,close:false});
+      const st=Math.max(s.start,t); if (s.end>st) out.push({...s,start:st}); t=Math.max(t,s.end); }
+    if (t<DAY_MIN) out.push({start:t,end:DAY_MIN,place:"home",people:0,close:false});
+    return out;
+  }
+
+  function run(){
+    const segs = fullDay();
+    const res = { current: M.simulateCurrent(segs,{startLevel:state.startLevel}) };
+    for (const k of Object.keys(state.personas))
+      res[k] = M.simulateProposed(segs, state.personas[k], {params:state.params, startLevel:state.startLevel, hrvFactor:state.hrv});
+    return {segs,res};
+  }
+
+  function drawChart(segs,res){
+    const W=800,Ht=300,ml=40,mr=12,mt=12,mb=30,iw=W-ml-mr,ih=Ht-mt-mb,N=DAY_MIN;
+    const x=m=>ml+m/N*iw, y=v=>mt+(100-v)/100*ih;
+    let s="";
+    for (const g of segs){
+      let band=null;
+      if (g.place==="out") band="--band-out"; else if (g.place==="sleep") band="--band-sleep"; else if (g.people>0) band="--band-guests";
+      if (band) s+=`<rect x="${x(g.start)}" y="${mt}" width="${x(g.end)-x(g.start)}" height="${ih}" fill="${css(band)}"/>`;
+    }
+    for (const v of [0,25,50,75,100]) s+=`<line x1="${ml}" x2="${W-mr}" y1="${y(v)}" y2="${y(v)}" stroke="${css("--line")}"/><text x="${ml-6}" y="${y(v)+4}" text-anchor="end">${v}%</text>`;
+    for (let m=0;m<=N;m+=180) s+=`<text x="${x(m)}" y="${Ht-10}" text-anchor="middle">${toClock(m)}</text>`;
+    for (const [k,,col] of SERIES){
+      if (!state.show[k]) continue;
+      const a=res[k].levels; let d="";
+      for (let i=0;i<a.length;i+=3) d+=(i?"L":"M")+x(i).toFixed(1)+","+y(a[i]).toFixed(1);
+      s+=`<path d="${d}" fill="none" stroke="${css(col)}" stroke-width="${k==="current"?1.6:2.2}" ${k==="current"?'stroke-dasharray="5 4"':""} stroke-linejoin="round"/>`;
+    }
+    document.getElementById("chart").innerHTML=s;
+  }
+
+  function drawSummary(segs,res){
+    const sleep = segs.find(g=>g.place==="sleep");
+    const bed = sleep ? sleep.start-1 : DAY_MIN-1;
+    document.querySelector("#summary tbody").innerHTML = SERIES.map(([k,label])=>{
+      const a=res[k].levels, peak = res[k].drains ? Math.max(...res[k].drains).toFixed(1)+" %/h" : "—";
+      return `<tr><td>${label}</td><td class="num">${Math.round(Math.min(...a))}%</td><td class="num">${Math.round(a[Math.max(0,bed)])}%</td><td class="num">${Math.round(a[a.length-1])}%</td><td class="num">${peak}</td></tr>`;
+    }).join("");
+  }
+
+  function drawSchedule(){
+    const tb=document.querySelector("#sched tbody");
+    tb.innerHTML = state.segments.map((g,i)=>`<tr data-i="${i}">
+      <td><input type="time" id="s-from-${i}" data-f="start" value="${toClock(g.start)}" aria-label="From"></td>
+      <td><input type="time" id="s-to-${i}" data-f="end" value="${toClock(g.end%DAY_MIN)}" aria-label="To"></td>
+      <td><select id="s-place-${i}" data-f="place" aria-label="Where">${["home","out","sleep"].map(p=>`<option ${p===g.place?"selected":""}>${p}</option>`).join("")}</select></td>
+      <td class="num"><input type="number" id="s-ppl-${i}" data-f="people" min="0" max="500" value="${g.people}" aria-label="People"></td>
+      <td><input type="checkbox" id="s-close-${i}" data-f="close" ${g.close?"checked":""} aria-label="Close friends"></td>
+      <td><button class="btn x" type="button" data-del="${i}" aria-label="Remove block">✕</button></td></tr>`).join("");
+    tb.querySelectorAll("[data-f]").forEach(el=>el.addEventListener("change",()=>{
+      const i=+el.closest("tr").dataset.i, f=el.dataset.f, g=state.segments[i];
+      if (f==="start") g.start=fromClock(el.value);
+      else if (f==="end"){ let e=fromClock(el.value); if (e<=g.start) e+=DAY_MIN; g.end=Math.min(e,DAY_MIN); }
+      else if (f==="people") g.people=Math.max(0,+el.value||0);
+      else if (f==="close") g.close=el.checked;
+      else g[f]=el.value;
+      markCustom(); render();
+    }));
+    tb.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",()=>{ state.segments.splice(+b.dataset.del,1); markCustom(); drawSchedule(); render(); }));
+  }
+
+  function drawPersonas(){
+    const tb=document.querySelector("#personas tbody");
+    tb.innerHTML = Object.entries(state.personas).map(([k,p])=>`<tr>
+      <td>${p.label}</td>
+      <td class="num"><input type="number" id="p-t-${k}" data-k="${k}" data-f="temperament" step="0.1" min="0.1" max="3" value="${p.temperament}" aria-label="${p.label} temperament"></td>
+      <td class="num"><input type="number" id="p-c-${k}" data-k="${k}" data-f="comfort" step="0.01" min="0" max="1" value="${p.comfort}" aria-label="${p.label} comfort"></td>
+      <td class="num"><input type="number" id="p-h-${k}" data-k="${k}" data-f="awakeHalfLifeHours" step="0.5" min="0.5" max="10" value="${p.awakeHalfLifeHours}" aria-label="${p.label} recharge half-life"></td></tr>`).join("");
+    tb.querySelectorAll("input").forEach(el=>el.addEventListener("input",()=>{ const v=parseFloat(el.value); if(!isNaN(v)){ state.personas[el.dataset.k][el.dataset.f]=v; render(); } }));
+  }
+
+  function drawModelCtls(){
+    const box=document.getElementById("modelCtl");
+    box.querySelectorAll("label").forEach(l=>l.remove());
+    for (const [key,label,min,max,step] of MODEL_CTLS){
+      const l=document.createElement("label"); l.className="ctl"; l.htmlFor="m-"+key;
+      l.innerHTML=`${label} <output>${fmt(state.params[key],step)}</output><input id="m-${key}" type="range" min="${min}" max="${max}" step="${step}" value="${state.params[key]}">`;
+      const inp=l.querySelector("input"), out=l.querySelector("output");
+      inp.addEventListener("input",()=>{ state.params[key]=+inp.value; out.textContent=fmt(inp.value,step); render(); });
+      box.appendChild(l);
+    }
+  }
+
+  function drawPresets(){
+    const box=document.getElementById("presets");
+    box.innerHTML = Object.entries(M.PRESET_DAYS).map(([k,d])=>`<button type="button" data-day="${k}" aria-pressed="${state.day===k}">${d.label}</button>`).join("") +
+      `<button type="button" data-day="custom" aria-pressed="${state.day==="custom"}" disabled>Custom</button>`;
+    box.querySelectorAll("button[data-day]:not([disabled])").forEach(b=>b.addEventListener("click",()=>{
+      state.day=b.dataset.day; state.segments=clone(M.PRESET_DAYS[state.day].segments); drawPresets(); drawSchedule(); render(); }));
+  }
+  function markCustom(){ if (state.day!=="custom"){ state.day="custom"; drawPresets(); } }
+
+  function drawLegend(){
+    document.getElementById("legend").innerHTML = SERIES.map(([k,label,col])=>`<label for="sh-${k}"><input type="checkbox" id="sh-${k}" data-k="${k}" ${state.show[k]?"checked":""}><span class="sw" style="background:var(${col})"></span>${label}</label>`).join("") +
+      `<span class="muted">Bands: <span style="color:var(--fg)">out</span>, <span style="color:var(--fg)">sleep</span>, <span style="color:var(--fg)">guests at home</span></span>`;
+    document.querySelectorAll("#legend input").forEach(i=>i.addEventListener("change",()=>{ state.show[i.dataset.k]=i.checked; render(); }));
+  }
+
+  function render(){
+    const {segs,res}=run();
+    drawChart(segs,res); drawSummary(segs,res);
+    document.getElementById("note").textContent = state.day==="custom" ? "Custom schedule." : M.PRESET_DAYS[state.day].note;
+    document.getElementById("startLevelOut").textContent = state.startLevel+"%";
+    document.getElementById("hrvOut").textContent = state.hrv.toFixed(2)+"×";
+  }
+
+  document.getElementById("addRow").addEventListener("click",()=>{
+    const lastEnd = state.segments.reduce((m,g)=>Math.max(m,g.end),0);
+    const start=Math.min(lastEnd,DAY_MIN-60);
+    state.segments.push({start,end:Math.min(start+60,DAY_MIN),place:"out",people:5,close:false});
+    markCustom(); drawSchedule(); render();
+  });
+  document.getElementById("copyJson").addEventListener("click",async e=>{
+    const txt=JSON.stringify(fullDay(),null,2);
+    try{ await navigator.clipboard.writeText(txt); e.target.textContent="Copied"; }catch{ e.target.textContent="Copy failed"; console.log(txt); }
+    setTimeout(()=>e.target.textContent="Copy as JSON",1500);
+  });
+  const sl=document.getElementById("startLevel"), hv=document.getElementById("hrv");
+  sl.addEventListener("input",()=>{ state.startLevel=+sl.value; render(); });
+  hv.addEventListener("input",()=>{ state.hrv=+hv.value; render(); });
+  document.getElementById("reset").addEventListener("click",()=>{
+    const segs=state.segments, day=state.day; state=fresh("office"); state.segments=segs; state.day=day;
+    sl.value=90; hv.value=1; drawModelCtls(); drawPersonas(); render();
+  });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",render);
+
+  drawPresets(); drawLegend(); drawModelCtls(); drawPersonas(); drawSchedule(); render();
+})();
+</script>
+</body>
+</html>
